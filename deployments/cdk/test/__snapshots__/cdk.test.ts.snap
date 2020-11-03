@@ -1,0 +1,86 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Snapshot Test 1`] = `
+Object {
+  "Resources": Object {
+    "ps3storybookBucketBAA5F972": Object {
+      "DeletionPolicy": "Delete",
+      "Properties": Object {
+        "BucketName": "storybook.test.p-s3-storybook",
+        "LifecycleConfiguration": Object {
+          "Rules": Array [
+            Object {
+              "ExpirationInDays": 14,
+              "Prefix": "branches/",
+              "Status": "Enabled",
+            },
+          ],
+        },
+        "WebsiteConfiguration": Object {
+          "IndexDocument": "index.html",
+        },
+      },
+      "Type": "AWS::S3::Bucket",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "ps3storybookBucketPolicy514DFB0B": Object {
+      "Properties": Object {
+        "Bucket": Object {
+          "Ref": "ps3storybookBucketBAA5F972",
+        },
+        "PolicyDocument": Object {
+          "Statement": Array [
+            Object {
+              "Action": "s3:GetObject",
+              "Effect": "Allow",
+              "Principal": "*",
+              "Resource": Object {
+                "Fn::Join": Array [
+                  "",
+                  Array [
+                    Object {
+                      "Fn::GetAtt": Array [
+                        "ps3storybookBucketBAA5F972",
+                        "Arn",
+                      ],
+                    },
+                    "/*",
+                  ],
+                ],
+              },
+            },
+            Object {
+              "Action": Array [
+                "s3:ListBucket",
+                "s3:PutObject",
+                "s3:GetBucketAcl",
+              ],
+              "Effect": "Allow",
+              "Principal": Object {
+                "AWS": Object {
+                  "Fn::Join": Array [
+                    "",
+                    Array [
+                      "arn:",
+                      Object {
+                        "Ref": "AWS::Partition",
+                      },
+                      ":iam::account-id:root",
+                    ],
+                  ],
+                },
+              },
+              "Resource": Array [
+                "arn:aws:s3:::storybook.test.p-s3-storybook",
+                "arn:aws:s3:::storybook.test.p-s3-storybook/*",
+              ],
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+      },
+      "Type": "AWS::S3::BucketPolicy",
+    },
+  },
+}
+`;
