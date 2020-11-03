@@ -1,0 +1,115 @@
+version: 2.1
+orbs:
+  aws-cli: circleci/aws-cli@1.3.0
+executors:
+  default:
+    working_directory: /home/circleci/src/
+    docker:
+      - image: circleci/node:14.15.0
+jobs:
+  build:
+    executor: default
+    steps:
+      - checkout
+      - restore_cache:
+          name: Restore cache dependencies
+          keys:
+            - v1-dependencies-{{ checksum "package.json" }}
+            - v1-dependencies-
+      - run:
+          name: Build Storybook
+          command: |
+            yarn run build-storybook
+      - save_cache:
+          name: Save cache dependencies
+          paths:
+            - node_modules
+          key: v1-dependencies-{{ checksum "package.json" }}
+      - run:
+          name: Save release dist
+          command: |
+            mkdir -p /tmp/workspace/storybook-static/ && cp -r ./storybook-static/* /tmp/workspace/storybook-static/
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - storybook-static/*
+
+  deploy_storybook:
+    executor: default
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp/workspace
+      - run:
+          name: Set STORYBOOK_BRANCH_NAME
+          command: |
+            branch=$(echo $CIRCLE_BRANCH | sed s#/#\_#g)
+            s3_url='export STORYBOOK_BRANCH_NAME=${branch}'
+            echo $(eval echo ${s3_url}) >> $BASH_ENV
+            source $BASH_ENV
+      - run:
+          name: Restore release storybook
+          command: |
+            cp -r /tmp/workspace/storybook-static/* ./storybook-static/
+
+      - aws-cli/setup:
+          profile-name: default
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          aws-region: AWS_DEFAULT_REGION
+      - run:
+          name: Deploy to S3
+          command: |
+            branch=$(echo $CIRCLE_BRANCH | sed s#/#\_#g)
+            aws s3 sync ./storybook-static/ "s3://$STORYBOOK_BUCKET_NAME/branches/$branch" \
+              --delete
+      - run:
+          name: Send notification for stage
+          command: |
+            name=$(echo ${CIRCLE_PROJECT_REPONAME} | cut -d"-" -f2)
+            payload=$(cat \<< EOS
+            {
+              "channel": "#lycle-l-devops",
+              "username": "lyclelapp",
+              "icon_url": "",
+              "attachments": [
+                {
+                  "color": "good",
+                  "title": "[${APP_ENV}] storybookのデプロイ終了",
+                  "title_link": "https://circleci.com/workflow-run/${CIRCLE_WORKFLOW_ID}",
+                  "text": "${name}のstorybookがデプロイされました\n https://s3-ap-northeast-1.amazonaws.com/${STORYBOOK_BUCKET_NAME}/branches/${STORYBOOK_BRANCH_NAME}/index.html",
+                  "footer": "circleci",
+                }
+              ]
+            }
+            EOS
+            )
+            curl -X POST -H "Authorization: Bearer ${SLACK_TOKEN}" \
+            -H "Content-type: application/json; charset=utf-8" \
+            --data "${payload}" https://slack.com/api/chat.postMessage
+
+workflows:
+  version: 2
+  deploy_dev:
+    jobs:
+      - build:
+          context: dev.p-s3-storybook
+          filters:
+            branches:
+              only:
+                - /feature\/.*/
+                - /improved\/.*/
+                - /hotfix\/.*/
+                - /renovate\/.*/
+                - master
+                - develop
+      - deploy_storybook:
+          context: dev.p-s3-storybook
+          requires:
+            - build
+          filters:
+            branches:
+              only:
+                - /feature\/.*/
+                - /improved\/.*/
+                - /hotfix\/.*/
